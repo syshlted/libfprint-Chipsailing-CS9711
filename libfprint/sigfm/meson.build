@@ -1,11 +1,5 @@
-
-sigfm_sources = ['sigfm.cpp']
-
-opencv = dependency('opencv4', required: true)
-doctest = dependency('doctest', required: true)
-
-libsigfm = static_library('sigfm',
-        sigfm_sources,
-        dependencies: [opencv],
-)
-sigfm_tests = executable('sigfm-tests', ['./tests.cpp'], dependencies: [doctest, opencv], link_with: [libsigfm])
+sigfm_tests = executable('sigfm-tests',
+    ['tests.c', 'sigfm.c'],
+    dependencies: mathlib_dep,
+    c_args: '-Wno-unused-result')
+test('sigfm', sigfm_tests, timeout: 180)

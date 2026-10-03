@@ -12,21 +12,28 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-typedef unsigned char       SigfmPix;
+
+typedef unsigned char SigfmPix;
+
 /**
- * @brief Contains information used by the sigfm algorithm for matching
- * @details Get one from sigfm_extract() and make sure to clean it up with sigfm_free_info()
- * @struct SigfmImgInfo
+ * @brief Keypoints and descriptors of one image, used for matching
+ * @details Get one from sigfm_extract(), sigfm_copy_info() or
+ * sigfm_deserialize_binary() and release it with sigfm_free_info()
  */
 typedef struct SigfmImgInfo SigfmImgInfo;
 
 /**
- * @brief Extracts information from an image for later use sigfm_match_score
+ * @brief Match ratio used by sigfm_match_score()
+ */
+#define SIGFM_DEFAULT_RATIO 0.85
+
+/**
+ * @brief Extract SIFT keypoints and descriptors from a grayscale image
  *
- * @param pix Pixels of the image must be width * height in length
+ * @param pix Pixels of the image, width * height bytes, row-major
  * @param width Width of the image
  * @param height Height of the image
- * @return SigfmImgInfo* Info that can be used with the API
+ * @return SigfmImgInfo* Info to pass to sigfm_match_score(), or NULL on error
  */
 SigfmImgInfo * sigfm_extract (const SigfmPix * pix,
                               int              width,
@@ -34,32 +41,64 @@ SigfmImgInfo * sigfm_extract (const SigfmPix * pix,
 
 /**
  * @brief Destroy an SigfmImgInfo
- * @warning Call this instead of free() or you will get UB!
- * @param info SigfmImgInfo to destroy
+ * @warning Call this instead of free()
  */
 void sigfm_free_info (SigfmImgInfo * info);
 
 /**
- * @brief Score how closely a frame matches another
+ * @brief Score how closely a frame matches another, with the default ratio
  *
  * @param frame Print to be checked
  * @param enrolled Canonical print to verify against
- * @return int Score of how closely they match, values <0 indicate error, 0 means always reject
+ * @return int Score of how closely they match, values <0 indicate error, 0
+ * means always reject
  */
 int sigfm_match_score (SigfmImgInfo * frame,
                        SigfmImgInfo * enrolled);
 
 /**
+ * @brief Score how closely a frame matches another
+ *
+ * @param ratio Lowe ratio-test threshold, between 0 and 1. Lower is stricter.
+ * Each sensor driver tunes its own value; see SIGFM_DEFAULT_RATIO
+ * @return int As sigfm_match_score()
+ */
+int sigfm_match_score_ratio (SigfmImgInfo * frame,
+                             SigfmImgInfo * enrolled,
+                             double         ratio);
+
+/**
+ * @brief As sigfm_match_score_ratio(), with the CS9711 project's original
+ * scoring
+ *
+ * That project de-duplicated matches by the y coordinate of the frame point
+ * alone, which gives lower scores than sigfm_match_score_ratio(). Its driver
+ * uses the library's default threshold, tuned against that scoring, so it
+ * keeps using it. Prefer sigfm_match_score_ratio() for new drivers.
+ */
+int sigfm_match_score_legacy (SigfmImgInfo * frame,
+                              SigfmImgInfo * enrolled,
+                              double         ratio);
+
+/**
  * @brief Serialize an image info for storage
+ *
+ * The format is fixed and little-endian, so stored prints stay readable
+ * across versions and machines.
  *
  * @param info SigfmImgInfo to store
  * @param outlen output: Length of the returned byte array
- * @return unsigned* char byte array for storage, should be free'd by the callee
+ * @return unsigned char* byte array for storage, release it with free(), or
+ * NULL on error
  */
 unsigned char * sigfm_serialize_binary (SigfmImgInfo * info,
                                         int          * outlen);
+
 /**
  * @brief Deserialize an SigfmImgInfo from storage
+ *
+ * The input is untrusted: it is length- and range-checked, and anything
+ * malformed is rejected.
  *
  * @param bytes Byte array to deserialize from
  * @param len Length of the byte array
@@ -71,18 +110,13 @@ SigfmImgInfo * sigfm_deserialize_binary (const unsigned char * bytes,
 /**
  * @brief Keypoints for an image. Low keypoints generally means the image is
  * low quality for matching
- *
- * @param info
- * @return int
  */
-
 int sigfm_keypoints_count (SigfmImgInfo * info);
 
 /**
  * @brief Copy an SigfmImgInfo
  *
- * @param info Source of copy
- * @return SigfmImgInfo* Newly allocated and copied version of info
+ * @return SigfmImgInfo* Newly allocated copy of info, or NULL on error
  */
 SigfmImgInfo * sigfm_copy_info (SigfmImgInfo * info);
 

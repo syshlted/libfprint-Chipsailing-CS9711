@@ -282,6 +282,10 @@ fpi_print_bz3_match (FpPrint *template, FpPrint *print, gint score_threshold, GE
  *
  * Returns: Whether the prints match, @error will be set if #FPI_MATCH_ERROR is returned
  */
+/* Lowe ratio-test threshold tuned for the CS9711 sensor. The Goodix driver
+ * uses SIGFM_DEFAULT_RATIO instead; each sensor is tuned separately. */
+#define SIGFM_MATCH_RATIO 0.75
+
 FpiMatchResult
 fpi_print_sigfm_match (FpPrint * template, FpPrint * print,
                        gint score_threshold, GError ** error)
@@ -298,7 +302,7 @@ fpi_print_sigfm_match (FpPrint * template, FpPrint * print,
   for (int i = 0; i != template->prints->len; ++i)
     {
       SigfmImgInfo * pinfo = g_ptr_array_index (template->prints, i);
-      int score = sigfm_match_score (pinfo, against);
+      int score = sigfm_match_score_legacy (pinfo, against, SIGFM_MATCH_RATIO);
       if (score < 0)
         {
           *error = fpi_device_error_new_msg (FP_DEVICE_ERROR_DATA_INVALID,

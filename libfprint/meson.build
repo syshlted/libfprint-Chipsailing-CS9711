@@ -24,6 +24,7 @@ libfprint_private_sources = [
     'fpi-print.c',
     'fpi-ssm.c',
     'fpi-usb-transfer.c',
+    'sigfm/sigfm.c',
 ] + spi_sources
 
 libfprint_public_headers = [
@@ -262,15 +263,13 @@ libnbis = static_library('nbis',
     ]),
     install: false)
 
-priv_deps = deps + libsigfm
-
 libfprint_private = static_library('fprint-private',
     sources: [
         fpi_enums,
         libfprint_private_sources,
     ],
     dependencies: deps,
-    link_with: [libnbis, libsigfm],
+    link_with: libnbis,
     install: false)
 
 libfprint_drivers = static_library('fprint-drivers',

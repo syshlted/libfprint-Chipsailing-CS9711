@@ -44,6 +44,4 @@
       libgusb \
       libusb \
       openssl \
-      pixman \
-      opencv-devel \
-      doctest-devel
+      pixman
