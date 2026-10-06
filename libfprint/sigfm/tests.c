@@ -91,6 +91,31 @@ main (void)
     }
   free (shifted);
 
+  /* Settings change what is found; out-of-range ones are rejected. */
+  {
+    SigfmParams cv = { 1.6, 10.0, 0 };
+    SigfmImgInfo *p = sigfm_extract_params (img, W, H, &cv);
+    SigfmParams def = { SIGFM_DEFAULT_SIGMA, SIGFM_DEFAULT_EDGE_THRESHOLD, 1 };
+    SigfmImgInfo *d = sigfm_extract_params (img, W, H, &def);
+    SigfmParams bad_sigma = { 0.1, 10.0, 0 };
+    SigfmParams bad_edge = { 1.6, 1000.0, 0 };
+    SigfmParams nan_sigma = { NAN, 10.0, 0 };
+
+    CHECK (p != NULL && d != NULL);
+    if (p && d)
+      {
+        CHECK (sigfm_keypoints_count (d) == count);   /* defaults = sigfm_extract */
+        CHECK (sigfm_keypoints_count (p) != count);
+        printf ("keypoints with sigma 1.6, edge 10, no CLAHE: %d\n", sigfm_keypoints_count (p));
+      }
+    sigfm_free_info (p);
+    sigfm_free_info (d);
+    CHECK (sigfm_extract_params (img, W, H, NULL) == NULL);
+    CHECK (sigfm_extract_params (img, W, H, &bad_sigma) == NULL);
+    CHECK (sigfm_extract_params (img, W, H, &bad_edge) == NULL);
+    CHECK (sigfm_extract_params (img, W, H, &nan_sigma) == NULL);
+  }
+
   /* Invalid arguments are rejected, not crashed on. */
   CHECK (sigfm_extract (NULL, W, H) == NULL);
   CHECK (sigfm_extract (img, 0, H) == NULL);

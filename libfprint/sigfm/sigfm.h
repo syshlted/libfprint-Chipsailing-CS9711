@@ -28,7 +28,24 @@ typedef struct SigfmImgInfo SigfmImgInfo;
 #define SIGFM_DEFAULT_RATIO 0.85
 
 /**
- * @brief Extract SIFT keypoints and descriptors from a grayscale image
+ * @brief SIFT settings, which each sensor tunes separately
+ *
+ * The defaults are the Goodix 538d's: sigma 2.0, edge threshold 18 and
+ * contrast enhancement on. The CS9711 driver was tuned without any of that,
+ * with OpenCV's defaults: sigma 1.6, edge threshold 10, no enhancement.
+ */
+typedef struct {
+  double sigma;           /**< Gaussian sigma of the base octave, 0.5 to 10 */
+  double edge_threshold;  /**< Edge response limit, 1 to 100. Higher keeps more edge-like points */
+  int    clahe;           /**< Non-zero to enhance local contrast (CLAHE) before extraction */
+} SigfmParams;
+
+#define SIGFM_DEFAULT_SIGMA 2.0
+#define SIGFM_DEFAULT_EDGE_THRESHOLD 18.0
+
+/**
+ * @brief Extract SIFT keypoints and descriptors from a grayscale image, with
+ * the default settings
  *
  * @param pix Pixels of the image, width * height bytes, row-major
  * @param width Width of the image
@@ -38,6 +55,16 @@ typedef struct SigfmImgInfo SigfmImgInfo;
 SigfmImgInfo * sigfm_extract (const SigfmPix * pix,
                               int              width,
                               int              height);
+
+/**
+ * @brief As sigfm_extract(), with explicit SIFT settings
+ *
+ * @return SigfmImgInfo* Info, or NULL on error or out-of-range settings
+ */
+SigfmImgInfo * sigfm_extract_params (const SigfmPix    * pix,
+                                     int                 width,
+                                     int                 height,
+                                     const SigfmParams * params);
 
 /**
  * @brief Destroy an SigfmImgInfo

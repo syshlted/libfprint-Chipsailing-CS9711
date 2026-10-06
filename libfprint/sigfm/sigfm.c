@@ -61,8 +61,6 @@ struct SigfmImgInfo {
 
 #define SIFT_OCTAVE_LAYERS 3
 #define SIFT_CONTRAST_THRESHOLD 0.04
-#define SIFT_EDGE_THRESHOLD 18.0
-#define SIFT_SIGMA 2.0
 
 #define SIFT_INIT_SIGMA 0.5
 #define SIFT_IMG_BORDER 5
@@ -312,6 +310,8 @@ typedef struct {
   // keypoints can live on (layers 1..SIFT_OCTAVE_LAYERS), indexed like gauss.
   Image* mag;
   Image* ori;
+  double sigma;          // SigfmParams, kept for keypoint sizes
+  double edge_threshold;
 } Pyramid;
 
 #define GAUSS(p, o, i) ((p)->gauss[(o) * (SIFT_OCTAVE_LAYERS + 3) + (i)])
@@ -340,8 +340,10 @@ static float atan2_deg(float y, float x)
     return a < 0 ? a + 360 : a;
 }
 
-static void build_pyramid(const Image* base, Pyramid* p)
+static void build_pyramid(const Image* base, const SigfmParams* params,
+                          Pyramid* p)
 {
+    const double sigma = params->sigma;
     const int layers = SIFT_OCTAVE_LAYERS;
     double sig[SIFT_OCTAVE_LAYERS + 3];
     double k = pow(2.0, 1.0 / layers);
@@ -352,9 +354,12 @@ static void build_pyramid(const Image* base, Pyramid* p)
     p->gauss = calloc(p->n_octaves * (layers + 3), sizeof(Image));
     p->dog = calloc(p->n_octaves * (layers + 2), sizeof(Image));
 
-    sig[0] = SIFT_SIGMA;
+    p->sigma = sigma;
+    p->edge_threshold = params->edge_threshold;
+
+    sig[0] = sigma;
     for (int i = 1; i < layers + 3; i++) {
-        double sig_prev = pow(k, (double) (i - 1)) * SIFT_SIGMA;
+        double sig_prev = pow(k, (double) (i - 1)) * sigma;
         double sig_total = sig_prev * k;
         sig[i] = sqrt(sig_total * sig_total - sig_prev * sig_prev);
     }
@@ -547,15 +552,15 @@ static int adjust_local_extrema(const Pyramid* p, Keypoint* kp, int o,
         double tr = dxx + dyy;
         double det = dxx * dyy - dxy * dxy;
 
-        if (det <= 0 || tr * tr * SIFT_EDGE_THRESHOLD >=
-                            (SIFT_EDGE_THRESHOLD + 1) * (SIFT_EDGE_THRESHOLD + 1) * det)
+        if (det <= 0 || tr * tr * p->edge_threshold >=
+                            (p->edge_threshold + 1) * (p->edge_threshold + 1) * det)
             return 0;
     }
 
     kp->x = (float) ((*c + xc) * (1 << o));
     kp->y = (float) ((*r + xr) * (1 << o));
     kp->octave = o + (*layer << 8) + ((int) lrint((xi + 0.5) * 255) << 16);
-    kp->size = (float) (SIFT_SIGMA * pow(2.0, (*layer + xi) / SIFT_OCTAVE_LAYERS) *
+    kp->size = (float) (p->sigma * pow(2.0, (*layer + xi) / SIFT_OCTAVE_LAYERS) *
                         (1 << o) * 2);
     return 1;
 }
@@ -793,8 +798,19 @@ static int kp_cmp(const void* a, const void* b)
 
 SigfmImgInfo* sigfm_extract(const SigfmPix* pix, int width, int height)
 {
-    if (!pix || width <= 0 || height <= 0 ||
-        width > SIGFM_MAX_DIM || height > SIGFM_MAX_DIM)
+    const SigfmParams params = {SIGFM_DEFAULT_SIGMA,
+                                SIGFM_DEFAULT_EDGE_THRESHOLD, 1};
+
+    return sigfm_extract_params(pix, width, height, &params);
+}
+
+SigfmImgInfo* sigfm_extract_params(const SigfmPix* pix, int width, int height,
+                                   const SigfmParams* params)
+{
+    if (!pix || !params || width <= 0 || height <= 0 ||
+        width > SIGFM_MAX_DIM || height > SIGFM_MAX_DIM ||
+        !(params->sigma >= 0.5 && params->sigma <= 10) ||
+        !(params->edge_threshold >= 1 && params->edge_threshold <= 100))
         return NULL;
 
     SigfmImgInfo* info = calloc(1, sizeof(SigfmImgInfo));
@@ -804,24 +820,24 @@ SigfmImgInfo* sigfm_extract(const SigfmPix* pix, int width, int height)
     Pyramid pyr;
 
     // Enhance local contrast for better SIFT detection.
-    if (!clahe(pix, width, height, enhanced))
+    if (!params->clahe || !clahe(pix, width, height, enhanced))
         memcpy(enhanced, pix, (size_t) width * height);
     for (int i = 0; i < width * height; i++)
         img.px[i] = enhanced[i];
     free(enhanced);
 
-    // Base image: doubled, blurred to SIFT_SIGMA assuming the input already
+    // Base image: doubled, blurred to the sigma assuming the input already
     // has SIFT_INIT_SIGMA.
     Image base = upscale2(&img);
     free(img.px);
     {
-        double sig_diff = sqrt(fmax(SIFT_SIGMA * SIFT_SIGMA -
+        double sig_diff = sqrt(fmax(params->sigma * params->sigma -
                                         SIFT_INIT_SIGMA * SIFT_INIT_SIGMA * 4,
                                     0.01));
         gaussian_blur(&base, &base, sig_diff);
     }
 
-    build_pyramid(&base, &pyr);
+    build_pyramid(&base, params, &pyr);
     free(base.px);
     find_extrema(&pyr, &kps);
 

@@ -308,6 +308,11 @@ invert_colors (guint8 *data, gint width, gint height)
     data[i] = 0xff - data[i];
 }
 
+/* SIFT settings the CS9711 driver was tuned with: OpenCV's defaults, and no
+ * contrast enhancement. The library's own defaults are the Goodix 538d's and
+ * give about twice as many keypoints on this sensor's frames. */
+static const SigfmParams sigfm_params = {1.6, 10.0, 0};
+
 static void
 fp_image_sigfm_extract_thread_func (GTask * task, void * src_obj,
                                     void * task_data,
@@ -316,7 +321,8 @@ fp_image_sigfm_extract_thread_func (GTask * task, void * src_obj,
   ExtractSigfmData * data = task_data;
   GTimer * timer = g_timer_new ();
 
-  data->sigfm_info = sigfm_extract (data->image, data->width, data->height);
+  data->sigfm_info = sigfm_extract_params (data->image, data->width, data->height,
+                                           &sigfm_params);
   g_timer_stop (timer);
   fp_dbg ("sigfm extract completed in %f secs", g_timer_elapsed (timer, NULL));
   g_timer_destroy (timer);
